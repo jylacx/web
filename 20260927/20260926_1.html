@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>寻味顺德·18关美食挑战（交互地图版）</title>
+<style>
+  :root{
+    --paper:#fffdf7;
+    --ink:#3a2c1f;
+    --orange:#e67e22;
+    --green:#2e7d32;
+    --yellow:#f9a825;
+  }
+  *{box-sizing:border-box;}
+  
+  /* 调整 body 布局，确保地图在屏幕正中间且完整显示 */
+  body{
+    margin:0;
+    min-height:100vh;
+    background:#fdf3e3;
+    font-family:"Microsoft YaHei","PingFang SC",sans-serif;
+    color:var(--ink);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:10px;
+    overflow: hidden; /* 防止出现多余的滚动条 */
+  }
+
+  /* 地图容器：紧贴图片大小，让热区百分比精准对应 */
+  .map-wrapper{
+    position:relative;
+    display:inline-block; /* 关键：让容器大小完美包裹图片 */
+    max-width:100%;
+    max-height:98vh;
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 10px 30px rgba(0,0,0,.2);
+    background:#f5e6c8;
+  }
+  
+  /* 图片：强制在屏幕内完整显示 */
+  .map-wrapper img{
+    display:block;
+    max-width:100%;
+    max-height:98vh; /* 关键：限制高度，确保完整显示 */
+    width:auto;
+    height:auto;
+    object-fit:contain; /* 保持原比例，不拉伸裁剪 */
+  }
+
+  /* 点击热区 */
+  .hotspot{
+    position:absolute;
+    width:5%; /* 热区大小 */
+    aspect-ratio:1;
+    border-radius:50%;
+    background:rgba(255,255,255,0.1);
+    border:2px dashed transparent;
+    cursor:pointer;
+    transition:all .2s;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:10;
+  }
+  .hotspot:hover{
+    background:rgba(230,126,34,0.4);
+    border-color:#d35400;
+    transform:scale(1.3);
+    z-index:20;
+  }
+  .hotspot::after{
+    content:attr(data-num);
+    font-size:16px;
+    color:#fff;
+    background:#d35400;
+    border-radius:50%;
+    width:24px;
+    height:24px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-weight:700;
+    opacity:0;
+    transition:opacity .2s;
+  }
+  .hotspot:hover::after{opacity:1;}
+
+  /* 模态框（弹出卡片） */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    z-index:1000;
+    padding:20px;
+    backdrop-filter:blur(4px);
+  }
+  .modal-overlay.active{display:flex;}
+  .modal-card{
+    background:var(--paper);
+    width:min(680px, 96vw);
+    max-height:90vh;
+    border-radius:16px;
+    padding:26px 30px;
+    box-shadow:0 20px 50px rgba(0,0,0,.3);
+    overflow-y:auto;
+    position:relative;
+    animation:popIn .3s ease;
+  }
+  @keyframes popIn{
+    from{transform:scale(.9);opacity:.5;}
+    to{transform:scale(1);opacity:1;}
+  }
+  .close-btn{
+    position:absolute;
+    top:12px;
+    right:16px;
+    background:none;
+    border:none;
+    font-size:28px;
+    color:#8d6e63;
+    cursor:pointer;
+    line-height:1;
+  }
+  .close-btn:hover{color:#d35400;}
+  .modal-card h2{
+    font-size:26px;
+    color:#b23c17;
+    margin:0 0 16px 0;
+  }
+  .route-bar{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    flex-wrap:wrap;
+    background:#fff3e0;
+    border:1px dashed var(--orange);
+    border-radius:999px;
+    padding:9px 16px;
+    font-weight:700;
+    color:#8d4e00;
+    margin-bottom:16px;
+    font-size:14px;
+  }
+  .food-desc,
+  .check,
+  .math{
+    border-radius:12px;
+    padding:12px 16px;
+    margin:12px 0;
+    line-height:1.8;
+    font-size:15px;
+  }
+  .food-desc{background:#f1f8e9; border-left:6px solid #7cb342;}
+  .check{background:#fce4ec; border-left:6px solid #d81b60;}
+  .math{background:#fff8e1; border-left:6px solid var(--yellow);}
+  .tag{
+    display:inline-block;
+    border:1px solid #f9a825;
+    border-radius:20px;
+    padding:1px 12px;
+    margin:2px 6px 2px 0;
+    background:#fffde7;
+    font-size:13px;
+    color:#8d6e00;
+  }
+  .fill-line{
+    display:inline-block;
+    min-width:150px;
+    border-bottom:1px dashed #999;
+    height:1.25em;
+    vertical-align:middle;
+  }
+  .fill-line.long{min-width:70%;}
+
+  /* 星级评价表格 */
+  .stars-section {
+    background:#f3e5f5; 
+    border-left:6px solid #8e24aa;
+    border-radius:12px;
+    padding:12px 16px;
+    margin:12px 0;
+  }
+  .stars-section h4 {
+    margin: 0 0 10px 0;
+    font-size: 15px;
+    color: #6a1b9a;
+  }
+  .star-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    text-align: center;
+  }
+  .star-table th, .star-table td {
+    padding: 6px 4px;
+    border-bottom: 1px dashed #e1bee7;
+  }
+  .star-table th {
+    color: #8e24aa;
+    font-weight: 600;
+  }
+  .star-table td:first-child {
+    text-align: left;
+    padding-left: 0;
+  }
+  .star-check {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    border: 1px solid #ce93d8;
+    border-radius: 4px;
+    background: #fff;
+    color: #8e24aa;
+    font-weight: bold;
+    cursor: pointer;
+    margin: 0 2px;
+    font-size: 12px;
+    user-select: none;
+  }
+  .star-check.selected {
+    background: #8e24aa;
+    color: #fff;
+    border-color: #8e24aa;
+  }
+  
+  .stamp, .discover {
+    border-radius:12px;
+    padding:12px 16px;
+    margin:12px 0;
+    line-height:1.8;
+    font-size:15px;
+  }
+  .stamp{background:#e0f2f1; border-left:6px solid #00897b;}
+  .discover{background:#efebe9; border-left:6px solid #6d4c41;}
+
+  @media (max-width:600px){
+    .modal-card{padding:18px 16px;}
+    .modal-card h2{font-size:22px;}
+    .star-table { font-size: 12px; }
+    .star-check { width: 18px; height: 18px; line-height: 18px; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="map-wrapper">
+  <!-- 请把地图图片命名为 map.jpg 放在同一目录下 -->
+  <img src="map.jpg" alt="寻味顺德·18关美食挑战地图" id="mapImage">
+
+  <!-- 点击热区：位置采用百分比（left, top），根据图片上的位置微调 -->
+  <div class="hotspot" data-id="1" style="left:18%; top:22%;" data-num="1"></div>
+  <div class="hotspot" data-id="2" style="left:44%; top:20%;" data-num="2"></div>
+  <div class="hotspot" data-id="3" style="left:68%; top:20%;" data-num="3"></div>
+  <div class="hotspot" data-id="4" style="left:28%; top:38%;" data-num="4"></div>
+  <div class="hotspot" data-id="5" style="left:46%; top:38%;" data-num="5"></div>
+  <div class="hotspot" data-id="6" style="left:58%; top:38%;" data-num="6"></div>
+  <div class="hotspot" data-id="7" style="left:66%; top:42%;" data-num="7"></div>
+  <div class="hotspot" data-id="8" style="left:48%; top:52%;" data-num="8"></div>
+  <div class="hotspot" data-id="9" style="left:80%; top:48%;" data-num="9"></div>
+  <div class="hotspot" data-id="10" style="left:16%; top:55%;" data-num="10"></div>
+  <div class="hotspot" data-id="11" style="left:68%; top:65%;" data-num="11"></div>
+  <div class="hotspot" data-id="12" style="left:78%; top:68%;" data-num="12"></div>
+  <div class="hotspot" data-id="13" style="left:16%; top:78%;" data-num="13"></div>
+  <div class="hotspot" data-id="14" style="left:40%; top:78%;" data-num="14"></div>
+  <div class="hotspot" data-id="15" style="left:50%; top:72%;" data-num="15"></div>
+  <div class="hotspot" data-id="16" style="left:60%; top:78%;" data-num="16"></div>
+  <div class="hotspot" data-id="17" style="left:82%; top:82%;" data-num="17"></div>
+  <div class="hotspot" data-id="18" style="left:92%; top:85%;" data-num="18"></div>
+</div>
+
+<!-- 弹出卡片模态框 -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card" id="modalCard">
+    <button class="close-btn" onclick="closeModal()">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script>
+// 18站数据（包含星级评价项目）
+const stations = [
+  {
+    food: "陈村粉",
+    to: "陈村镇·陈村粉",
+    foodDesc: "薄、爽、滑、软，米香浓郁，是陈村传统名点。",
+    intro: "第一站——陈村镇，要把足球从手中“送”到准确的位置，像制作陈村粉一样，先把每一个动作做准确，才能开启后面的闯关之旅。",
+    mathTip: "标出投掷点、落点圈，记录圈内、圈外次数，并比较多少。",
+    stars: ['能完成规范掷球动作', '能准确标出点并记录数据', '能遵守投掷安全距离']
+  },
+  {
+    food: "凤城鱼皮角",
+    to: "凤城·鱼皮角",
+    foodDesc: "外皮薄韧，内馅鲜香，形似鱼皮角，是顺德特色小吃。",
+    intro: "鱼皮角的外皮薄而有韧性，包住馅料后还要保持完整。踢足球也是一样，力量不能太大，方向也不能跑偏。第二站，要学会让足球沿着自己的路线稳稳向前。",
+    mathTip: "记录从起点到终点的步数，估算“一步大约多长”，比较步数与距离的关系。",
+    stars: ['控球方向基本准确', '能完成直线运球', '能用步数或时间进行简单比较']
+  },
+  {
+    food: "伦教糕",
+    to: "伦教·伦教糕",
+    foodDesc: "软糯弹牙，清甜微酸，带有发酵米香，是伦教传统名点。",
+    intro: "伦教糕入口软糯、弹牙，却又有自己的韧劲。足球运动也不能一味向前，当道路发生变化时，就要学会及时调整。第三站，要让自己的足球灵活、有弹性，遇到转弯也不慌张。",
+    mathTip: "画出实际运球路线，标出转折点，思考在什么位置进行变向最合适。",
+    stars: ['变向时能降低重心并控制球', '能识别转折点和线段', '能根据时间、失误调整动作']
+  },
+  {
+    food: "大良双皮奶",
+    to: "大良·双皮奶",
+    foodDesc: "奶香浓郁，上层奶皮甘香，下层滑嫩，是大良经典甜品。",
+    intro: "双皮奶看似细腻平滑，做好它却需要耐心和细致。来到大良，也要把足球练得“细腻”起来——绕杆时不能急，要让每一次触球都恰到好处，让足球顺着路线流畅前进。",
+    mathTip: "画出S形运球路线，结合曲线圆滑转弯的特点，思考怎样运球更流畅。",
+    stars: ['能连续完成S形绕杆', '能控制绕杆节奏', '能画出曲线路线并理解其特点']
+  },
+  {
+    food: "大良炒牛奶",
+    to: "大良·炒牛奶",
+    foodDesc: "软滑鲜香，火候讲究，是顺德传统名菜。",
+    intro: "炒牛奶讲究火候，也讲究动作的节奏。足球场上的两个位置之间，也有不同的“走法”。来到这一站，要尝试不同路线，看看哪条路更短，哪条路更适合自己。",
+    mathTip: "比较两条路线的长短与速度，思考直线为什么可能更短却不一定更快。",
+    stars: ['能根据障碍选择路线', '能记录并比较时间、步数', '能理解直线与曲线的区别']
+  },
+  {
+    food: "炸牛奶",
+    to: "大良·炸牛奶",
+    foodDesc: "外脆内滑，甜而不腻，是顺德经典点心。",
+    intro: "炸牛奶外脆内滑，变化就在不同的空间里发生。今天，我们也要从一个中心位置出发，向不同方向寻找自己的路线。一个点，可以连接出许多方向；一个足球，也可以开启许多可能。",
+    mathTip: "从中心点O出发画出射线，模拟圆桌向外的8个上菜方向，观察射线分割平面形成的区域并标注方位。",
+    stars: ['能辨认方向并完成往返运球', '能理解中心点与射线', '能与家长或同伴合作记录数据']
+  },
+  {
+    food: "顺德烧鹅",
+    to: "顺德·烧鹅",
+    foodDesc: "皮脆肉嫩，汁香浓郁，是顺德代表性烧味。",
+    intro: "一只烧鹅要做到皮脆肉嫩，火候需要稳定；足球控球同样需要稳定的节奏。来到这一关，要寻找自己的“最佳触球节奏”，让每一次触球都成为向前迈进的一小步。",
+    mathTip: "在线段上标出每次触球的位置，观察各点之间的距离是否接近。",
+    stars: ['能根据速度调整触球频率', '能用点表示触球位置', '能根据数据解释控球效果']
+  },
+  {
+    food: "拆鱼羹",
+    to: "顺德·拆鱼羹",
+    foodDesc: "鱼肉拆丝，配料丰富，汤羹鲜美，是顺德传统家常菜。",
+    intro: "一碗拆鱼羹，把鱼肉、配料和汤汁巧妙地组合在一起。足球传接球也需要多个位置之间的联系。",
+    mathTip: "画出A、B、C三点并连接，数一数球的运动经过几条线段，说明传球路线的变化。",
+    stars: ['传球方向和力度基本合适', '能完成停球衔接', '能用三点两线表达传接路线']
+  },
+  {
+    food: "酿鲮鱼",
+    to: "顺德·酿鲮鱼",
+    foodDesc: "鱼肉酿回鱼皮，造型完整，鲜嫩精细，是顺德手工菜代表。",
+    intro: "酿鲮鱼最考验的是精准和完整。这一关，也要像完成一道精细的顺德菜一样，把自己的运动表现认真记录下来。今天不只比谁练得好，还要用数据告诉自己进步了多少。",
+    mathTip: "记录成绩，与之前的数据进行对比，判断进步幅度。",
+    stars: ['数据记录真实完整', '能正确绘制条形图', '能对比数据发现进步']
+  },
+  {
+    food: "凤城酿节瓜",
+    to: "凤城·酿节瓜",
+    foodDesc: "节瓜清甜，馅料鲜美，造型完整，是凤城传统菜。",
+    intro: "节瓜可以装进不同的馅料，形成一道完整的美食；足球场上的一个个点，也可以连接成不同的路线和空间。",
+    mathTip: "比较沿边线与沿对角线运球的路程长短，说说你的发现。",
+    stars: ['能按指定路线控球', '能正确识别图形要素', '能比较不同路线的长短与难度']
+  },
+  {
+    food: "均安蒸猪",
+    to: "均安·蒸猪",
+    foodDesc: "皮爽肉滑，肥而不腻，是均安传统名菜。",
+    intro: "一道均安蒸猪需要把每一个环节都处理好，足球传球也是如此。面对不同方向的目标，要学会判断方向、控制力量、准确出球。",
+    mathTip: "以自己为起点画出3条射线，比较不同射线的方向和夹角大小。",
+    stars: ['能根据目标调整脚型和力度', '能准确记录命中率', '能用方向、夹角描述传球路线']
+  },
+  {
+    food: "均安鱼饼",
+    to: "均安·鱼饼",
+    foodDesc: "鱼肉打胶，煎香弹牙，是均安特色美食。",
+    intro: "鱼饼可以煎、可以煮，不同的做法都有自己的路线。足球场上遇到障碍也是一样：最短的路，不一定就是最好的路。这一关，要找到属于自己的最佳路线。",
+    mathTip: "画出至少两条路线，比较路线长度、障碍数量和完成效果，说明为什么最短路线可能不是最优路线。",
+    stars: ['能结合障碍规划路线', '能计算路线长度', '能根据时间和碰倒次数选择最优路线']
+  },
+  {
+    food: "顶骨大鳍",
+    to: "顺德·顶骨大鳍",
+    foodDesc: "顺德传统宴席硬菜，讲究整体协调，寓意吉祥。",
+    intro: "顶骨大鳍是顺德传统宴席上的一道硬菜，讲究整体协调。足球场上，队员的位置也需要彼此呼应。来到这里，要观察左右位置，找到平衡、对应、协调的站位。",
+    mathTip: "画出A、O、B三点，用步数或标志物测量AO与OB是否相等，判断是否形成对称关系。",
+    stars: ['能保持合理练习距离', '能根据同伴位置调整站位', '能用对称和距离表达观察结果']
+  },
+  {
+    food: "乐从鱼腐",
+    to: "乐从·鱼腐",
+    foodDesc: "柔软多孔，吸汁鲜美，是乐从特色食材。",
+    intro: "鱼腐柔软多孔，却很能“吸住”汤汁；经过前面13关的练习，也已经积累了自己的“足球能量”。来到乐从，这一关要把之前学过的本领拿出来，看看自己的能力究竟增长了多少。",
+    mathTip: "将本次成绩与第9课时成绩进行相减，判断是进步还是退步，并写出原因。",
+    stars: ['能独立完成测试', '能正确计算差值', '能根据结果提出下一步练习计划']
+  },
+  {
+    food: "顺德鱼生",
+    to: "顺德·鱼生",
+    foodDesc: "鱼片薄透，配料丰富，讲究搭配，是顺德名菜。",
+    intro: "顺德鱼生讲究鱼片与各种配料之间的搭配，就像足球场上的传球与跑位：球走一条路线，人走另一条路线，最终在合适的位置相遇。这一关，要让自己的传球和跑位真正“连起来”。",
+    mathTip: "画出A—B—C路线，区分斜线和直线，并说明不同路线对接球的影响。",
+    stars: ['能完成传球与跑位衔接', '能判断传球路线', '能根据接球效果调整传球力度']
+  },
+  {
+    food: "顺德腊味煲仔饭",
+    to: "顺德·腊味煲仔饭",
+    foodDesc: "腊味香浓，米饭油润，饭焦香脆，是顺德经典主食。",
+    intro: "一锅煲仔饭，需要米饭、腊味和火候共同配合，才能形成独特的味道。足球也是如此——传球路线和跑位路线要彼此配合。",
+    mathTip: "画出传球线和跑位线，观察两条线是否相交、平行或形成其他关系。",
+    stars: ['能根据障碍改变路线', '能完成传跑配合', '能用线与线的关系解释动作选择']
+  },
+  {
+    food: "姜撞奶",
+    to: "顺德·姜撞奶",
+    foodDesc: "姜汁与奶凝固，甜辣嫩滑，是顺德经典甜品。",
+    intro: "姜撞奶看似简单，却需要温度、速度和时机恰到好处。走到最后一站，也不能只会一个动作，而要把前面学过的直线、折线、曲线、传球、跑位和射门全部串起来，完成一次真正的足球挑战。",
+    mathTip: "在小场地上标出起点、传球点、射门点等“点”，画出运球和跑位“线”，用斜线表示经过的“面”。",
+    stars: ['能完成连续技术组合', '设计图中的点、线、面清晰', '能根据实际练习修改方案']
+  },
+  {
+    food: "猪杂粥",
+    to: "顺德·猪杂粥",
+    foodDesc: "粥底绵滑，猪杂鲜嫩，温暖收尾，是顺德宵夜代表。",
+    intro: "一碗热腾腾的猪杂粥，是顺德美食之旅的温暖收尾。18关走到这里，也该停下来看看：我从哪里出发？走过了哪些路线？又成长了多少？",
+    mathTip: "记录成绩，与之前的数据进行对比，判断进步幅度。",
+    stars: ['能完成重测并如实记录', '能总结收获、发现问题并提出改进目标', '能对比数据评估成长']
+  }
+];
+
+const overlay = document.getElementById('modalOverlay');
+const modalContent = document.getElementById('modalContent');
+
+// 绑定点击事件
+document.querySelectorAll('.hotspot').forEach(el => {
+  el.addEventListener('click', () => {
+    const id = parseInt(el.getAttribute('data-id'));
+    if (id && stations[id - 1]) {
+      showStation(id - 1);
+    }
+  });
+});
+
+function showStation(index) {
+  const st = stations[index];
+  const from = index === 0 ? '出发·顺德' : stations[index - 1].to;
+
+  // 生成星级评价表 HTML
+  let starTableHTML = `
+    <div class="stars-section">
+      <h4>⭐ 我的表现（自评+家长评，在对应星级格内勾选）</h4>
+      <table class="star-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">评价项目</th>
+            <th>★</th>
+            <th>★★</th>
+            <th>★★★</th>
+          </tr>
+        </thead>
+        <tbody>
+  `;
+  
+  st.stars.forEach((item) => {
+    starTableHTML += `
+      <tr>
+        <td>${item}</td>
+        <td><span class="star-check" onclick="toggleStar(this)">★</span></td>
+        <td><span class="star-check" onclick="toggleStar(this)">★★</span></td>
+        <td><span class="star-check" onclick="toggleStar(this)">★★★</span></td>
+      </tr>
+    `;
+  });
+
+  starTableHTML += `
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  modalContent.innerHTML = `
+    <div class="route-bar">
+      <span>🚶 路线：${from}</span>
+      <span>👣 👣 👣</span>
+      <span>➜ 到达：${st.to}</span>
+    </div>
+    <h2>第${index + 1}站｜${st.food}</h2>
+    <div class="food-desc">
+      <strong>🍽 美食介绍：</strong>${st.foodDesc}<br>
+      <strong>寻味链接：</strong>${st.intro}
+    </div>
+    <div class="check">
+      <strong>📍 我的打卡点：</strong>${st.to} <span class="fill-line"></span>
+    </div>
+    <div class="math">
+      <strong>📐 今天发现的数学：</strong>
+      <span class="tag">点</span>
+      <span class="tag">线</span>
+      <span class="tag">面</span>
+      <div>${st.mathTip}</div>
+    </div>
+    ${starTableHTML}
+    <div class="stamp">
+      <strong>🖐 打卡印章：</strong><span class="fill-line"></span>
+    </div>
+    <div class="discover">
+      <strong>💬 我今天最大的发现：</strong><span class="fill-line long"></span>
+    </div>
+  `;
+  overlay.classList.add('active');
+}
+
+// 切换星星选中状态
+function toggleStar(el) {
+  const row = el.parentElement.parentElement;
+  const siblings = row.querySelectorAll('.star-check');
+  siblings.forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function closeModal() {
+  overlay.classList.remove('active');
+}
+
+// 点击遮罩层关闭
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) closeModal();
+});
+
+// 按 Esc 关闭
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
+</body>
+</html>
